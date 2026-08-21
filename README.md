@@ -1,0 +1,2 @@
+# civitai_api_search
+WEB上の検索ができない場合に使う
