@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Civitai Prompt Auto Sort Copy
 // @namespace    https://civitai.com/
-// @version      1.3.0
-// @description  Civitaiでポジティブプロンプトを指定カテゴリ順に自動整列。重複除去・品質タグ優先・ネガティブプロンプト無加工に対応。
+// @version      1.4.0
+// @description  Civitaiでポジティブプロンプトを指定カテゴリ順に自動整列。重複除去・品質タグ優先・90byte折り返し・ネガティブプロンプト無加工に対応。
 // @homepageURL  https://github.com/j13351th-coder/civitai_api_search
 // @supportURL   https://github.com/j13351th-coder/civitai_api_search/issues
 // @updateURL    https://raw.githubusercontent.com/j13351th-coder/civitai_api_search/main/civitai_prompt_sorter.user.js
@@ -22,6 +22,8 @@
   const FORCE_EXPRESSION = new Set(['looking down at viewer']);
   const SERIES_TAGS = new Set([]);
   const ARTIST_TAGS = new Set([]);
+  const MAX_LINE_BYTES = 90;
+  const UTF8_ENCODER = new TextEncoder();
 
   const RX = {
     quality: /^(?:masterpiece|best quality|high quality|great quality|good quality|normal quality|low quality|worst quality|amazing quality|very aesthetic|aesthetic|ultra[- ]detailed|highly detailed|high detailed|detailed|intricate details|absurdres|incredibly absurdres|highres|official art|key visual|illustration|highly detailed illustration|artstation style|perfect composition|elegant|sharp focus|realistic|photo|detailed face and eyes|detailed skin|safe|sensitive|questionable|explicit|newest|recent|mid|old|early|late|meta|commentary request|translation request|score[ _]\d+(?:[ _]up)?|source[ _][a-z0-9_ -]+|rating[: _-]?(?:safe|general|sensitive|questionable|explicit)|19\d{2}s?|20\d{2}s?|\d{4}|year\s*\d{4}|circa\s*\d{4})$/,
@@ -130,9 +132,31 @@
     return [...masterpiece,...rest];
   }
 
-  function formatLine(tokens) {
+  function utf8ByteLength(text) {
+    return UTF8_ENCODER.encode(String(text ?? '')).length;
+  }
+
+  function formatLines(tokens, maxBytes=MAX_LINE_BYTES) {
     const items=tokens.filter(Boolean);
-    return items.length ? `${items.join(', ')}, ` : '';
+    if (!items.length) return [];
+
+    const lines=[];
+    let current=[];
+
+    for (const token of items) {
+      const candidate=[...current,token];
+      const candidateText=`${candidate.join(', ')}, `;
+
+      if (current.length && utf8ByteLength(candidateText)>maxBytes) {
+        lines.push(`${current.join(', ')}, `);
+        current=[token];
+      } else {
+        current=candidate;
+      }
+    }
+
+    if (current.length) lines.push(`${current.join(', ')}, `);
+    return lines;
   }
 
   function sortPrompt(text) {
@@ -149,22 +173,22 @@
 
     buckets.quality=prioritizeMasterpiece(dedupeExact(buckets.quality));
 
-    const line=(...keys)=>formatLine(dedupeExact(keys.flatMap(k=>buckets[k])));
+    const lines=(...keys)=>formatLines(dedupeExact(keys.flatMap(k=>buckets[k])));
     const sections=[
-      [line('quality')],
-      [line('count')],
-      [line('series','artist')],
-      [line('hair','face','body'),line('top'),line('bottom'),line('shoes','accessory')],
-      [line('background')],
-      [line('camera')],
-      [line('expression','pose','action')],
-      [line('other')]
+      lines('quality'),
+      lines('count'),
+      lines('series','artist'),
+      [...lines('hair','face','body'),...lines('top'),...lines('bottom'),...lines('shoes','accessory')],
+      lines('background'),
+      lines('camera'),
+      lines('expression','pose','action'),
+      lines('other')
     ];
 
     return sections
-      .map(lines=>lines.filter(Boolean))
-      .filter(lines=>lines.length)
-      .map(lines=>lines.join('\n'))
+      .map(sectionLines=>sectionLines.filter(Boolean))
+      .filter(sectionLines=>sectionLines.length)
+      .map(sectionLines=>sectionLines.join('\n'))
       .join('\n\n');
   }
 
@@ -239,5 +263,5 @@
     } catch (e) { console.warn('[Civitai Prompt Sorter] copy transform failed',e); }
   },true);
 
-  globalThis.civitaiPromptSorter=Object.freeze({sortPrompt,classify,normalizeToken,splitPrompt,isLoraTag,isQualityLike,dedupeExact});
+  globalThis.civitaiPromptSorter=Object.freeze({sortPrompt,classify,normalizeToken,splitPrompt,isLoraTag,isQualityLike,dedupeExact,utf8ByteLength,formatLines});
 })();
