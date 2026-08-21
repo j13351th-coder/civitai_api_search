@@ -1,0 +1,1154 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Civitai API検索</title>
+  <style>
+    :root{
+      color-scheme:dark;
+      --bg:#0d0f14;
+      --panel:#151922;
+      --panel2:#1b2130;
+      --card:#141923;
+      --line:#2c3446;
+      --text:#edf1f7;
+      --muted:#9ca8b9;
+      --accent:#7aa7ff;
+      --accent2:#937dff;
+      --warn:#ffcc66;
+      --danger:#ff7d7d;
+      --ok:#55d6a9;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:system-ui,-apple-system,"Segoe UI","Noto Sans JP",sans-serif;
+    }
+    .wrap{max-width:1600px;margin:auto;padding:22px}
+    h1{margin:0 0 6px;font-size:30px}
+    .subtitle{margin:0 0 18px;color:var(--muted);font-size:14px}
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:16px;
+    }
+    .controls{
+      display:grid;
+      grid-template-columns:minmax(280px,2fr) repeat(4,minmax(150px,1fr)) auto;
+      gap:12px;
+      align-items:end;
+    }
+    .controls.secondary-row{
+      grid-template-columns:repeat(4,minmax(160px,1fr)) 1fr auto auto;
+      margin-top:12px;
+    }
+    .field{display:flex;flex-direction:column;gap:6px;min-width:0}
+    label{font-size:12px;font-weight:700;color:var(--muted)}
+    input[type="text"], select{
+      width:100%;
+      height:42px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:var(--panel2);
+      color:var(--text);
+      padding:0 11px;
+      outline:none;
+    }
+    input[type="text"]:focus,select:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px rgba(122,167,255,.15);
+    }
+    select:disabled{opacity:.55}
+    .check{
+      height:42px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:var(--panel2);
+      padding:0 12px;
+      font-size:13px;
+    }
+    button{
+      height:42px;
+      border:0;
+      border-radius:10px;
+      padding:0 15px;
+      cursor:pointer;
+      font-weight:800;
+      color:white;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+    }
+    button.secondary{background:#293246;color:var(--text)}
+    button.danger{background:#733b45}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    .notice{
+      margin-top:12px;
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid rgba(255,204,102,.25);
+      background:rgba(255,204,102,.07);
+      color:#ffe4a3;
+      font-size:13px;
+      display:none;
+    }
+    .toolbar{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin:18px 0 12px;
+    }
+    .status{color:var(--muted);font-size:14px}
+    .status strong{color:var(--text)}
+    .retry{
+      display:none;
+      align-items:center;
+      gap:10px;
+      padding:9px 12px;
+      border:1px solid rgba(255,204,102,.3);
+      background:rgba(255,204,102,.08);
+      border-radius:10px;
+      color:#ffe4a3;
+      font-size:13px;
+    }
+    .pager{display:flex;gap:8px;align-items:center}
+    .page-pill{
+      border:1px solid var(--line);
+      background:var(--panel);
+      color:var(--muted);
+      border-radius:999px;
+      padding:7px 11px;
+      font-size:12px;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+      gap:18px;
+    }
+    .card{
+      overflow:hidden;
+      border:1px solid var(--line);
+      border-radius:16px;
+      background:var(--card);
+      display:flex;
+      flex-direction:column;
+      min-height:100%;
+    }
+    .thumb-wrap{
+      position:relative;
+      background:#080a0f;
+      aspect-ratio:3/4;
+      overflow:hidden;
+    }
+    .thumb{
+      width:100%;
+      height:100%;
+      display:block;
+      object-fit:cover;
+      transition:transform .22s ease;
+    }
+    .card:hover .thumb{transform:scale(1.015)}
+    .placeholder{
+      width:100%;
+      height:100%;
+      display:grid;
+      place-items:center;
+      color:#657086;
+      font-weight:700;
+    }
+    .top-badges{
+      position:absolute;
+      left:10px;
+      top:10px;
+      right:10px;
+      z-index:3;
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .badge{
+      background:rgba(8,10,15,.78);
+      border:1px solid rgba(255,255,255,.14);
+      box-shadow:0 2px 7px rgba(0,0,0,.25);
+      backdrop-filter:blur(5px);
+      border-radius:999px;
+      padding:5px 8px;
+      font-size:11px;
+      line-height:1;
+      font-weight:850;
+      color:#fff;
+    }
+    .badge.base{
+      background:rgba(35,42,57,.82);
+      color:#dfe7f6;
+    }
+    .thumb-overlay{
+      position:absolute;
+      inset:auto 0 0 0;
+      z-index:2;
+      padding:68px 13px 13px;
+      background:
+        linear-gradient(
+          to bottom,
+          rgba(7,9,14,0) 0%,
+          rgba(7,9,14,.28) 24%,
+          rgba(7,9,14,.78) 62%,
+          rgba(7,9,14,.96) 100%
+        );
+      color:#fff;
+    }
+    .overlay-author{
+      font-size:13px;
+      font-weight:800;
+      margin-bottom:5px;
+      display:flex;
+      align-items:center;
+      gap:7px;
+      min-width:0;
+    }
+    .overlay-author a{
+      color:#71e39d;
+      text-decoration:none;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .overlay-author a:hover{text-decoration:underline}
+    .overlay-title{
+      margin:0;
+      font-size:20px;
+      font-weight:900;
+      line-height:1.22;
+      letter-spacing:-.01em;
+      text-shadow:0 2px 7px rgba(0,0,0,.7);
+      display:-webkit-box;
+      -webkit-line-clamp:2;
+      -webkit-box-orient:vertical;
+      overflow:hidden;
+    }
+    .overlay-title a{
+      color:#fff;
+      text-decoration:none;
+    }
+    .overlay-version{
+      margin-top:5px;
+      color:#cbd3e1;
+      font-size:12px;
+      font-weight:700;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .overlay-stats{
+      display:flex;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:12px;
+      margin-top:9px;
+      font-size:12px;
+      font-weight:800;
+      color:#eef2f8;
+    }
+    .overlay-stat{
+      display:inline-flex;
+      align-items:center;
+      gap:4px;
+      padding:3px 0;
+      text-shadow:0 1px 3px rgba(0,0,0,.8);
+    }
+    .overlay-label{
+      color:#aeb9ca;
+      font-weight:700;
+    }
+    .body{padding:12px 13px 13px;display:flex;flex-direction:column;gap:9px;flex:1}
+    .title{margin:0;font-size:18px;line-height:1.35;overflow-wrap:anywhere}
+    .creator a,.title a{color:var(--text);text-decoration:none}
+    .creator a:hover,.title a:hover{text-decoration:underline}
+    .creator{font-size:13px;color:var(--muted)}
+    .stats{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:8px;
+    }
+    .stat{
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:#111621;
+      padding:9px 10px;
+    }
+    .stat-label{font-size:11px;color:var(--muted);margin-bottom:3px}
+    .stat-value{font-size:16px;font-weight:850}
+    .meta{
+      display:grid;
+      grid-template-columns:auto 1fr;
+      gap:6px 10px;
+      font-size:13px;
+      color:var(--muted);
+    }
+    .meta b{color:var(--text)}
+    .desc{
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.55;
+      display:-webkit-box;
+      -webkit-line-clamp:3;
+      -webkit-box-orient:vertical;
+      overflow:hidden;
+    }
+    .links{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+    .links a{
+      text-decoration:none;
+      color:white;
+      border-radius:9px;
+      padding:8px 10px;
+      background:#293246;
+      font-size:13px;
+      font-weight:800;
+    }
+    .links a.primary{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+    .message{
+      grid-column:1/-1;
+      padding:34px;
+      text-align:center;
+      color:var(--muted);
+      border:1px dashed var(--line);
+      border-radius:16px;
+      background:rgba(255,255,255,.02);
+    }
+    .message.error{color:#ffd2d2;border-color:rgba(255,125,125,.35);background:rgba(255,125,125,.07)}
+    .foot{margin-top:20px;color:var(--muted);font-size:12px;line-height:1.65}
+    code{padding:2px 6px;border:1px solid var(--line);border-radius:6px;background:#101520}
+    @media(max-width:1200px){
+      .controls,.controls.secondary-row{grid-template-columns:repeat(2,1fr)}
+    }
+    @media(max-width:700px){
+      .wrap{padding:14px}
+      .controls,.controls.secondary-row{grid-template-columns:1fr}
+      .grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Civitai API検索</h1>
+  <p class="subtitle">Civitaiの通常Models検索UIを使わず、公開APIから直接モデルを検索します。モデル情報はサムネイル上に重ねて表示します。</p>
+
+  <section class="panel">
+    <div class="controls">
+      <div class="field">
+        <label for="query">検索語</label>
+        <input id="query" type="text" placeholder="例: anima / illustrious / character">
+      </div>
+
+      <div class="field">
+        <label for="type">モデル種別</label>
+        <select id="type">
+          <option value="">すべて</option>
+          <option value="Checkpoint">Checkpoint</option>
+          <option value="LORA">LoRA</option>
+          <option value="TextualInversion">Textual Inversion</option>
+          <option value="Hypernetwork">Hypernetwork</option>
+          <option value="AestheticGradient">Aesthetic Gradient</option>
+          <option value="Controlnet">ControlNet</option>
+          <option value="Poses">Poses</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="baseModel">Base Model</label>
+        <select id="baseModel">
+          <option value="">すべて</option>
+
+          <optgroup label="よく使う">
+            <option value="Anima">Anima</option>
+            <option value="Illustrious">Illustrious</option>
+            <option value="NoobAI">NoobAI</option>
+            <option value="Pony">Pony</option>
+            <option value="Pony V7">Pony V7</option>
+            <option value="SDXL 1.0">SDXL 1.0</option>
+            <option value="SD 1.5">SD 1.5</option>
+          </optgroup>
+
+          <optgroup label="Stable Diffusion 1.x / 2.x">
+            <option value="SD 1.4">SD 1.4</option>
+            <option value="SD 1.5">SD 1.5</option>
+            <option value="SD 1.5 LCM">SD 1.5 LCM</option>
+            <option value="SD 1.5 Hyper">SD 1.5 Hyper</option>
+            <option value="SD 2.0">SD 2.0</option>
+            <option value="SD 2.0 768">SD 2.0 768</option>
+            <option value="SD 2.1">SD 2.1</option>
+            <option value="SD 2.1 768">SD 2.1 768</option>
+            <option value="SD 2.1 Unclip">SD 2.1 Unclip</option>
+          </optgroup>
+
+          <optgroup label="Stable Diffusion 3 / 3.5">
+            <option value="SD 3">SD 3</option>
+            <option value="SD 3.5">SD 3.5</option>
+            <option value="SD 3.5 Medium">SD 3.5 Medium</option>
+            <option value="SD 3.5 Large">SD 3.5 Large</option>
+            <option value="SD 3.5 Large Turbo">SD 3.5 Large Turbo</option>
+          </optgroup>
+
+          <optgroup label="SDXL系">
+            <option value="SDXL 0.9">SDXL 0.9</option>
+            <option value="SDXL 1.0">SDXL 1.0</option>
+            <option value="SDXL 1.0 LCM">SDXL 1.0 LCM</option>
+            <option value="SDXL Distilled">SDXL Distilled</option>
+            <option value="SDXL Turbo">SDXL Turbo</option>
+            <option value="SDXL Lightning">SDXL Lightning</option>
+            <option value="SDXL Hyper">SDXL Hyper</option>
+            <option value="Pony">Pony</option>
+            <option value="Pony V7">Pony V7</option>
+            <option value="Illustrious">Illustrious</option>
+            <option value="NoobAI">NoobAI</option>
+          </optgroup>
+
+          <optgroup label="Flux">
+            <option value="Flux.1 S">Flux.1 S</option>
+            <option value="Flux.1 D">Flux.1 D</option>
+            <option value="Flux.1 Krea">Flux.1 Krea</option>
+            <option value="Flux.1 Kontext">Flux.1 Kontext</option>
+            <option value="Flux.2 D">Flux.2 D</option>
+            <option value="Flux.2 Klein 9B">Flux.2 Klein 9B</option>
+            <option value="Flux.2 Klein 9B-base">Flux.2 Klein 9B-base</option>
+            <option value="Flux.2 Klein 4B">Flux.2 Klein 4B</option>
+            <option value="Flux.2 Klein 4B-base">Flux.2 Klein 4B-base</option>
+          </optgroup>
+
+          <optgroup label="画像生成・その他">
+            <option value="Anima">Anima</option>
+            <option value="Qwen">Qwen</option>
+            <option value="ZImageTurbo">ZImageTurbo</option>
+            <option value="ZImageBase">ZImageBase</option>
+            <option value="HiDream">HiDream</option>
+            <option value="Chroma">Chroma</option>
+            <option value="AuraFlow">AuraFlow</option>
+            <option value="Kolors">Kolors</option>
+            <option value="Hunyuan 1">Hunyuan 1</option>
+            <option value="Lumina">Lumina</option>
+            <option value="Stable Cascade">Stable Cascade</option>
+            <option value="Playground v2">Playground v2</option>
+            <option value="PixArt a">PixArt a</option>
+            <option value="PixArt E">PixArt E</option>
+            <option value="ODOR">ODOR</option>
+            <option value="Other">Other</option>
+          </optgroup>
+
+          <optgroup label="動画系">
+            <option value="SVD">SVD</option>
+            <option value="SVD XT">SVD XT</option>
+            <option value="Hunyuan Video">Hunyuan Video</option>
+            <option value="Mochi">Mochi</option>
+            <option value="LTXV">LTXV</option>
+            <option value="LTXV2">LTXV2</option>
+            <option value="LTXV 2.3">LTXV 2.3</option>
+            <option value="LTXV 2.5">LTXV 2.5</option>
+            <option value="CogVideoX">CogVideoX</option>
+            <option value="Wan Video">Wan Video</option>
+            <option value="Wan Video 1.3B t2v">Wan Video 1.3B t2v</option>
+            <option value="Wan Video 14B t2v">Wan Video 14B t2v</option>
+            <option value="Wan Video 14B i2v 480p">Wan Video 14B i2v 480p</option>
+            <option value="Wan Video 14B i2v 720p">Wan Video 14B i2v 720p</option>
+            <option value="Wan Video 2.2 I2V-A14B">Wan Video 2.2 I2V-A14B</option>
+            <option value="Wan Video 2.2 T2V-A14B">Wan Video 2.2 T2V-A14B</option>
+            <option value="Wan Video 2.2 TI2V-5B">Wan Video 2.2 TI2V-5B</option>
+            <option value="Wan Video 2.5 T2V">Wan Video 2.5 T2V</option>
+            <option value="Wan Video 2.5 I2V">Wan Video 2.5 I2V</option>
+          </optgroup>
+
+          <optgroup label="クラウド / その他の新世代モデル">
+            <option value="OpenAI">OpenAI</option>
+            <option value="Nano Banana">Nano Banana</option>
+            <option value="Imagen4">Imagen4</option>
+            <option value="Veo 3">Veo 3</option>
+            <option value="Seedream">Seedream</option>
+            <option value="Seedance">Seedance</option>
+            <option value="Sora 2">Sora 2</option>
+            <option value="Kling">Kling</option>
+            <option value="Vidu Q1">Vidu Q1</option>
+            <option value="Ideogram 4.0">Ideogram 4.0</option>
+            <option value="MiniMax H3">MiniMax H3</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="sort">並び順</label>
+        <select id="sort">
+          <option value="Newest">新着順</option>
+          <option value="Most Downloaded">ダウンロード数順</option>
+          <option value="Highest Rated">評価順</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="period">集計期間</label>
+        <select id="period">
+          <option value="AllTime">全期間</option>
+          <option value="Year">1年</option>
+          <option value="Month">1か月</option>
+          <option value="Week">1週間</option>
+          <option value="Day">1日</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="searchBtn">検索</button>
+      </div>
+    </div>
+
+    <div class="controls secondary-row">
+      <div class="field">
+        <label for="limit">1ページの件数</label>
+        <select id="limit">
+          <option value="20">20件</option>
+          <option value="50" selected>50件</option>
+          <option value="100">100件</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>NSFW</label>
+        <div class="check"><input id="nsfw" type="checkbox" checked><span>NSFWを含める</span></div>
+      </div>
+
+      <div class="field">
+        <label>検索条件の保存</label>
+        <button id="saveUrlBtn" class="secondary">条件をURLに保存</button>
+      </div>
+
+      <div class="field">
+        <label>共有 / バックアップ</label>
+        <button id="copyUrlBtn" class="secondary">URLをコピー</button>
+      </div>
+
+      <div></div>
+
+      <button id="clearBtn" class="secondary">条件クリア</button>
+      <button id="cancelRetryBtn" class="danger" style="display:none">再試行を中止</button>
+    </div>
+
+    <div id="downloadNotice" class="notice">
+      「ダウンロード数順」はCivitai検索バックエンドで503になりやすいため、1ページの件数を自動的に20件へ固定しています。
+    </div>
+    <div style="margin-top:10px;color:var(--muted);font-size:12px;line-height:1.5">
+      Base Model候補はCivitaiの現行定義をもとに分類しています。よく使う項目は先頭にまとめています。
+    </div>
+  </section>
+
+  <div class="toolbar">
+    <div>
+      <div id="status" class="status">条件を入力して検索してください。</div>
+      <div id="retryBox" class="retry"></div>
+    </div>
+    <div class="pager">
+      <span id="pageInfo" class="page-pill">ページ 1</span>
+      <button id="prevBtn" class="secondary" disabled>← 前へ</button>
+      <button id="nextBtn" class="secondary" disabled>次へ →</button>
+    </div>
+  </div>
+
+  <main id="results" class="grid"></main>
+
+  <div class="foot">
+    検索条件はこのHTMLのURL末尾の <code>#...</code> に保存できます。同じPCで同じHTMLファイルを開く場合、そのURLをブックマークして条件を再利用できます。<br>
+    503の場合は最大5回まで自動再試行します。待ち時間は原則 2 → 4 → 8 → 16 → 30秒です。Civitaiが <code>Retry-After</code> を返した場合は、それも考慮します。
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const API_URL = "https://civitai.com/api/v1/models";
+  const MAX_RETRIES = 5;
+  const DEFAULT_BACKOFF = [2, 4, 8, 16, 30];
+
+  const $ = id => document.getElementById(id);
+  const els = {
+    query: $("query"),
+    type: $("type"),
+    baseModel: $("baseModel"),
+    sort: $("sort"),
+    period: $("period"),
+    limit: $("limit"),
+    nsfw: $("nsfw"),
+    searchBtn: $("searchBtn"),
+    clearBtn: $("clearBtn"),
+    saveUrlBtn: $("saveUrlBtn"),
+    copyUrlBtn: $("copyUrlBtn"),
+    cancelRetryBtn: $("cancelRetryBtn"),
+    prevBtn: $("prevBtn"),
+    nextBtn: $("nextBtn"),
+    status: $("status"),
+    retryBox: $("retryBox"),
+    results: $("results"),
+    pageInfo: $("pageInfo"),
+    downloadNotice: $("downloadNotice")
+  };
+
+  const state = {
+    pageCursors: [null],
+    currentPageIndex: 0,
+    nextCursor: null,
+    abortController: null,
+    retryCancelled: false,
+    lastNonDownloadLimit: "50"
+  };
+
+  const fmt = new Intl.NumberFormat("ja-JP");
+
+  function text(v) {
+    return String(v ?? "").trim();
+  }
+
+  function formatNumber(v) {
+    return Number.isFinite(Number(v)) ? fmt.format(Number(v)) : "-";
+  }
+
+  function stripHtml(html) {
+    if (!html) return "";
+    const doc = new DOMParser().parseFromString(String(html), "text/html");
+    return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
+  function truncate(s, n = 180) {
+    const v = text(s);
+    return v.length > n ? v.slice(0, n) + "…" : v;
+  }
+
+  function creatorUrl(username) {
+    return `https://civitai.com/user/${encodeURIComponent(username)}`;
+  }
+
+  function modelUrl(id) {
+    return `https://civitai.com/models/${id}`;
+  }
+
+  function modelApiUrl(id) {
+    return `https://civitai.com/api/v1/models/${id}`;
+  }
+
+  function getSelectedBaseModel() {
+    return text(els.baseModel.value);
+  }
+
+  function setStatus(message, strong = "") {
+    els.status.textContent = "";
+    if (strong) {
+      const b = document.createElement("strong");
+      b.textContent = strong;
+      els.status.appendChild(b);
+      els.status.appendChild(document.createTextNode(message));
+    } else {
+      els.status.textContent = message;
+    }
+  }
+
+  function setBusy(busy) {
+    els.searchBtn.disabled = busy;
+    els.prevBtn.disabled = busy || state.currentPageIndex === 0;
+    els.nextBtn.disabled = busy || !state.nextCursor;
+  }
+
+  function updateSortBehavior() {
+    const isMostDownloaded = els.sort.value === "Most Downloaded";
+
+    if (isMostDownloaded) {
+      if (!els.limit.disabled && els.limit.value !== "20") {
+        state.lastNonDownloadLimit = els.limit.value;
+      }
+      els.limit.value = "20";
+      els.limit.disabled = true;
+      els.downloadNotice.style.display = "block";
+    } else {
+      const wasDisabled = els.limit.disabled;
+      els.limit.disabled = false;
+      if (wasDisabled) {
+        els.limit.value = state.lastNonDownloadLimit || "50";
+      }
+      els.downloadNotice.style.display = "none";
+    }
+  }
+
+  function buildUrl(cursor = null) {
+    const p = new URLSearchParams();
+    const q = text(els.query.value);
+    const type = text(els.type.value);
+    const base = getSelectedBaseModel();
+    const sort = text(els.sort.value);
+    const period = text(els.period.value);
+
+    if (q) p.set("query", q);
+    if (type) p.append("types", type);
+    if (base) p.append("baseModels", base);
+    if (sort) p.set("sort", sort);
+    if (period) p.set("period", period);
+
+    const effectiveLimit = sort === "Most Downloaded" ? "20" : text(els.limit.value);
+    p.set("limit", effectiveLimit || "50");
+    p.set("nsfw", els.nsfw.checked ? "true" : "false");
+
+    if (cursor) p.set("cursor", cursor);
+    return `${API_URL}?${p.toString()}`;
+  }
+
+  function serializeFilters() {
+    const p = new URLSearchParams();
+    if (text(els.query.value)) p.set("q", text(els.query.value));
+    if (els.type.value) p.set("type", els.type.value);
+    if (els.baseModel.value) p.set("base", els.baseModel.value);
+    if (els.sort.value) p.set("sort", els.sort.value);
+    if (els.period.value) p.set("period", els.period.value);
+    p.set("limit", els.sort.value === "Most Downloaded" ? "20" : els.limit.value);
+    if (els.nsfw.checked) p.set("nsfw", "1");
+    return p.toString();
+  }
+
+  function saveFiltersToUrl(showMessage = true) {
+    const hash = serializeFilters();
+    const newUrl = `${location.href.split("#")[0]}${hash ? "#" + hash : ""}`;
+    history.replaceState(null, "", newUrl);
+    if (showMessage) setStatus("検索条件をURLに保存しました。");
+    return newUrl;
+  }
+
+  function loadFiltersFromUrl() {
+    if (!location.hash || location.hash.length < 2) return false;
+    const p = new URLSearchParams(location.hash.slice(1));
+
+    els.query.value = p.get("q") || "";
+    els.type.value = p.get("type") || "";
+    const savedBase = p.get("base") || p.get("baseCustom") || "";
+    if ([...els.baseModel.options].some(o => o.value === savedBase)) {
+      els.baseModel.value = savedBase;
+    } else {
+      els.baseModel.value = "";
+    }
+    els.sort.value = p.get("sort") || "Newest";
+    els.period.value = p.get("period") || "AllTime";
+    els.limit.value = p.get("limit") || "50";
+    els.nsfw.checked = p.has("nsfw") ? p.get("nsfw") === "1" : true;
+
+    if (els.sort.value !== "Most Downloaded") {
+      state.lastNonDownloadLimit = els.limit.value;
+    }
+    updateSortBehavior();
+    return true;
+  }
+
+  async function copyCurrentUrl() {
+    const url = saveFiltersToUrl(false);
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus("検索条件付きURLをクリップボードへコピーしました。");
+    } catch {
+      window.prompt("このURLをコピーしてください。", url);
+    }
+  }
+
+  function pickThumbnail(model) {
+    for (const version of model.modelVersions || []) {
+      for (const image of version.images || []) {
+        if (image?.url) return image.url;
+      }
+    }
+    return "";
+  }
+
+  function getBaseModels(model) {
+    const values = [];
+    for (const version of model.modelVersions || []) {
+      if (version?.baseModel && !values.includes(version.baseModel)) {
+        values.push(version.baseModel);
+      }
+    }
+    return values.length ? values.join(" / ") : "-";
+  }
+
+  function getBaseModelList(model) {
+    const values = [];
+    for (const version of model.modelVersions || []) {
+      if (version?.baseModel && !values.includes(version.baseModel)) {
+        values.push(version.baseModel);
+      }
+    }
+    return values;
+  }
+
+  function getLatestVersionName(model) {
+    const version = model.modelVersions?.[0];
+    return version?.name ? String(version.name) : "";
+  }
+
+  function addMeta(meta, label, value) {
+    const b = document.createElement("b");
+    b.textContent = label;
+    const s = document.createElement("span");
+    s.textContent = value || "-";
+    meta.append(b, s);
+  }
+
+  function renderMessage(message, error = false) {
+    els.results.innerHTML = "";
+    const box = document.createElement("div");
+    box.className = "message" + (error ? " error" : "");
+    box.textContent = message;
+    els.results.appendChild(box);
+  }
+
+  function renderResults(data) {
+    els.results.innerHTML = "";
+    const items = Array.isArray(data.items) ? data.items : [];
+
+    if (!items.length) {
+      renderMessage("検索結果がありません。");
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+
+    for (const model of items) {
+      const card = document.createElement("article");
+      card.className = "card";
+
+      const thumbWrap = document.createElement("div");
+      thumbWrap.className = "thumb-wrap";
+
+      // サムネイル
+      const thumb = pickThumbnail(model);
+      if (thumb) {
+        const img = document.createElement("img");
+        img.className = "thumb";
+        img.src = thumb;
+        img.alt = model.name || "サムネイル";
+        img.loading = "lazy";
+        img.referrerPolicy = "no-referrer";
+        thumbWrap.appendChild(img);
+      } else {
+        const ph = document.createElement("div");
+        ph.className = "placeholder";
+        ph.textContent = "画像なし";
+        thumbWrap.appendChild(ph);
+      }
+
+      // 左上: 種別 + Base Model
+      const topBadges = document.createElement("div");
+      topBadges.className = "top-badges";
+
+      const typeBadge = document.createElement("span");
+      typeBadge.className = "badge";
+      typeBadge.textContent = model.type || "-";
+      topBadges.appendChild(typeBadge);
+
+      const bases = getBaseModelList(model);
+      for (const base of bases.slice(0, 2)) {
+        const baseBadge = document.createElement("span");
+        baseBadge.className = "badge base";
+        baseBadge.textContent = base;
+        topBadges.appendChild(baseBadge);
+      }
+
+      if (bases.length > 2) {
+        const more = document.createElement("span");
+        more.className = "badge base";
+        more.textContent = `+${bases.length - 2}`;
+        more.title = bases.slice(2).join(" / ");
+        topBadges.appendChild(more);
+      }
+
+      thumbWrap.appendChild(topBadges);
+
+      // 下部オーバーレイ
+      const overlay = document.createElement("div");
+      overlay.className = "thumb-overlay";
+
+      const creator = document.createElement("div");
+      creator.className = "overlay-author";
+      creator.appendChild(document.createTextNode("作者 "));
+      if (model.creator?.username) {
+        const a = document.createElement("a");
+        a.href = creatorUrl(model.creator.username);
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = model.creator.username;
+        creator.appendChild(a);
+      } else {
+        creator.appendChild(document.createTextNode("-"));
+      }
+
+      const title = document.createElement("h2");
+      title.className = "overlay-title";
+      const titleLink = document.createElement("a");
+      titleLink.href = modelUrl(model.id);
+      titleLink.target = "_blank";
+      titleLink.rel = "noopener noreferrer";
+      titleLink.textContent = model.name || "(名称なし)";
+      title.appendChild(titleLink);
+
+      // Versionタイトル（modelVersions[0].name）
+      const latestVersionName = getLatestVersionName(model);
+      const version = document.createElement("div");
+      version.className = "overlay-version";
+      version.textContent = latestVersionName
+        ? `タイトル / Version: ${latestVersionName}`
+        : "タイトル / Version: -";
+
+      // DL数 / お気に入り数
+      const overlayStats = document.createElement("div");
+      overlayStats.className = "overlay-stats";
+
+      const dl = document.createElement("span");
+      dl.className = "overlay-stat";
+      dl.innerHTML = `<span class="overlay-label">↓ DL</span> ${formatNumber(model.stats?.downloadCount)}`;
+
+      const fav = document.createElement("span");
+      fav.className = "overlay-stat";
+      fav.innerHTML = `<span class="overlay-label">★ お気に入り</span> ${formatNumber(model.stats?.favoriteCount)}`;
+
+      const idStat = document.createElement("span");
+      idStat.className = "overlay-stat";
+      idStat.innerHTML = `<span class="overlay-label">ID</span> ${model.id ?? "-"}`;
+
+      overlayStats.append(dl, fav, idStat);
+      overlay.append(creator, title, version, overlayStats);
+      thumbWrap.appendChild(overlay);
+
+      // 下部本体はリンクだけに簡素化
+      const body = document.createElement("div");
+      body.className = "body";
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      addMeta(meta, "Base Model", getBaseModels(model));
+      addMeta(meta, "種別", model.type || "-");
+
+      const links = document.createElement("div");
+      links.className = "links";
+
+      const openModel = document.createElement("a");
+      openModel.className = "primary";
+      openModel.href = modelUrl(model.id);
+      openModel.target = "_blank";
+      openModel.rel = "noopener noreferrer";
+      openModel.textContent = "モデルページ";
+
+      if (model.creator?.username) {
+        const openCreator = document.createElement("a");
+        openCreator.href = creatorUrl(model.creator.username);
+        openCreator.target = "_blank";
+        openCreator.rel = "noopener noreferrer";
+        openCreator.textContent = "作者ページ";
+        links.appendChild(openCreator);
+      }
+
+      const openApi = document.createElement("a");
+      openApi.href = modelApiUrl(model.id);
+      openApi.target = "_blank";
+      openApi.rel = "noopener noreferrer";
+      openApi.textContent = "API JSON";
+
+      links.prepend(openModel);
+      links.appendChild(openApi);
+
+      body.append(meta, links);
+      card.append(thumbWrap, body);
+      frag.appendChild(card);
+    }
+
+    els.results.appendChild(frag);
+  }
+
+  function updatePager() {
+    els.pageInfo.textContent = `ページ ${state.currentPageIndex + 1}`;
+    els.prevBtn.disabled = state.currentPageIndex === 0;
+    els.nextBtn.disabled = !state.nextCursor;
+  }
+
+  function showRetry(message) {
+    els.retryBox.textContent = message;
+    els.retryBox.style.display = "flex";
+    els.cancelRetryBtn.style.display = "inline-block";
+  }
+
+  function hideRetry() {
+    els.retryBox.style.display = "none";
+    els.retryBox.textContent = "";
+    els.cancelRetryBtn.style.display = "none";
+  }
+
+  async function sleepWithCountdown(seconds, retryNo) {
+    for (let remain = seconds; remain > 0; remain--) {
+      if (state.retryCancelled) throw new Error("再試行を中止しました。");
+      showRetry(`Civitai検索サーバーが混雑しています。再試行 ${retryNo}/${MAX_RETRIES}：${remain}秒後に再試行します…`);
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+
+  async function fetchWithRetry(url) {
+    state.retryCancelled = false;
+    hideRetry();
+
+    for (let retry = 0; retry <= MAX_RETRIES; retry++) {
+      if (state.retryCancelled) throw new Error("再試行を中止しました。");
+
+      state.abortController = new AbortController();
+
+      let response;
+      try {
+        response = await fetch(url, { signal: state.abortController.signal });
+      } catch (e) {
+        if (e.name === "AbortError") throw new Error("検索を中止しました。");
+        throw e;
+      }
+
+      if (response.status !== 503) return response;
+
+      if (retry === MAX_RETRIES) {
+        hideRetry();
+        return response;
+      }
+
+      const retryAfterRaw = response.headers.get("Retry-After");
+      const retryAfter = Number(retryAfterRaw);
+      const fallback = DEFAULT_BACKOFF[retry] ?? 30;
+      const waitSeconds = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.max(fallback, retryAfter)
+        : fallback;
+
+      await sleepWithCountdown(waitSeconds, retry + 1);
+    }
+  }
+
+  async function runSearch(cursor = null) {
+    try {
+      setBusy(true);
+      hideRetry();
+      setStatus("検索中…");
+
+      const url = buildUrl(cursor);
+      const res = await fetchWithRetry(url);
+
+      if (!res.ok) {
+        let detail = "";
+        try {
+          const body = await res.text();
+          detail = body ? `\n${body.slice(0, 300)}` : "";
+        } catch {}
+        throw new Error(`HTTP ${res.status}${detail}`);
+      }
+
+      const data = await res.json();
+      state.nextCursor = data.metadata?.nextCursor || null;
+
+      renderResults(data);
+      updatePager();
+      saveFiltersToUrl(false);
+
+      const count = Array.isArray(data.items) ? data.items.length : 0;
+      const q = text(els.query.value) || "条件指定";
+      setStatus(`：${count}件を表示しました。`, `「${q}」`);
+    } catch (e) {
+      console.error(e);
+      renderMessage(`検索エラー: ${e.message}`, true);
+      setStatus("検索に失敗しました。");
+    } finally {
+      hideRetry();
+      setBusy(false);
+      updatePager();
+    }
+  }
+
+  function resetPaging() {
+    state.pageCursors = [null];
+    state.currentPageIndex = 0;
+    state.nextCursor = null;
+    updatePager();
+  }
+
+  async function newSearch() {
+    updateSortBehavior();
+    resetPaging();
+    await runSearch(null);
+  }
+
+  async function nextPage() {
+    if (!state.nextCursor) return;
+    const cursor = state.nextCursor;
+    state.pageCursors.push(cursor);
+    state.currentPageIndex = state.pageCursors.length - 1;
+    await runSearch(cursor);
+  }
+
+  async function prevPage() {
+    if (state.currentPageIndex <= 0) return;
+    state.pageCursors.pop();
+    state.currentPageIndex = state.pageCursors.length - 1;
+    await runSearch(state.pageCursors[state.currentPageIndex]);
+  }
+
+  function clearAll() {
+    els.query.value = "";
+    els.type.value = "";
+    els.baseModel.value = "";
+    els.sort.value = "Newest";
+    els.period.value = "AllTime";
+    els.limit.value = "50";
+    els.nsfw.checked = true;
+    state.lastNonDownloadLimit = "50";
+    updateSortBehavior();
+    resetPaging();
+    els.results.innerHTML = "";
+    history.replaceState(null, "", location.href.split("#")[0]);
+    setStatus("検索条件をクリアしました。");
+  }
+
+  els.searchBtn.addEventListener("click", newSearch);
+  els.clearBtn.addEventListener("click", clearAll);
+  els.saveUrlBtn.addEventListener("click", () => saveFiltersToUrl(true));
+  els.copyUrlBtn.addEventListener("click", copyCurrentUrl);
+  els.nextBtn.addEventListener("click", nextPage);
+  els.prevBtn.addEventListener("click", prevPage);
+
+  els.cancelRetryBtn.addEventListener("click", () => {
+    state.retryCancelled = true;
+    state.abortController?.abort();
+    hideRetry();
+    setStatus("自動再試行を中止しました。");
+  });
+
+  els.sort.addEventListener("change", () => {
+    updateSortBehavior();
+  });
+
+  els.limit.addEventListener("change", () => {
+    if (els.sort.value !== "Most Downloaded") {
+      state.lastNonDownloadLimit = els.limit.value;
+    }
+  });
+
+  els.query.addEventListener("keydown", e => {
+    if (e.key === "Enter") newSearch();
+  });
+
+  const restored = loadFiltersFromUrl();
+  updateSortBehavior();
+  updatePager();
+
+  if (restored) {
+    setStatus("URLから検索条件を復元しました。「検索」を押してください。");
+  }
+})();
+</script>
+</body>
+</html>
+
