@@ -1,0 +1,313 @@
+name: ChatGPT API search layout update
+
+on:
+  push:
+    paths:
+      - '.github/workflows/chatgpt-api-layout-update.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply collection-search style split layout
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('civitai_api_search_v4.html')
+          text = path.read_text(encoding='utf-8')
+
+          css_marker = '/* api-split-layout-v1 */'
+          js_marker = '/* api-split-layout-v1-script */'
+          if css_marker in text or js_marker in text:
+              raise SystemExit('Layout patch already exists; refusing to apply twice.')
+
+          css = r'''
+
+    /* api-split-layout-v1 */
+    html,body{height:100%;overflow:hidden}
+    .wrap{
+      max-width:none;
+      width:100%;
+      height:100vh;
+      margin:0;
+      padding:0;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
+    .api-page-header{
+      flex:0 0 auto;
+      padding:11px 16px 10px;
+      background:#121721;
+      border-bottom:1px solid var(--line);
+    }
+    .api-page-header h1{margin:0 0 3px;font-size:20px;line-height:1.25}
+    .api-page-header .subtitle{margin:0;font-size:12px;line-height:1.45}
+    .api-layout{
+      display:grid;
+      grid-template-columns:300px minmax(0,1fr);
+      flex:1;
+      min-height:0;
+      overflow:hidden;
+      transition:grid-template-columns .22s cubic-bezier(.4,0,.2,1);
+    }
+    .api-sidebar{
+      min-width:0;
+      overflow:auto;
+      padding:14px;
+      background:#111620;
+      border-right:1px solid #2b3241;
+      opacity:1;
+      transform:translateX(0);
+      transition:
+        opacity .16s ease,
+        transform .22s cubic-bezier(.4,0,.2,1),
+        padding-left .22s cubic-bezier(.4,0,.2,1),
+        padding-right .22s cubic-bezier(.4,0,.2,1),
+        border-color .16s ease;
+    }
+    .api-sidebar-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:12px;
+      min-width:0;
+    }
+    .api-sidebar-title{font-size:14px;font-weight:900;color:var(--text)}
+    .api-collapse-btn,.api-expand-btn{
+      flex:0 0 auto;
+      width:34px;
+      height:34px;
+      padding:0;
+      display:grid;
+      place-items:center;
+      border:1px solid #3a4356;
+      border-radius:999px;
+      background:#202839;
+      color:#eef2f8;
+      font-size:17px;
+      line-height:1;
+      font-weight:900;
+      cursor:pointer;
+      box-shadow:none;
+    }
+    .api-collapse-btn:hover,.api-expand-btn:hover{background:#2a3448}
+    .api-sidebar .panel{
+      padding:0;
+      border:0;
+      border-radius:0;
+      background:transparent;
+    }
+    .api-sidebar .controls,
+    .api-sidebar .controls.secondary-row{
+      display:flex;
+      flex-direction:column;
+      grid-template-columns:none;
+      gap:12px;
+      margin:0;
+      align-items:stretch;
+    }
+    .api-sidebar .controls.secondary-row{margin-top:12px}
+    .api-sidebar .field{width:100%;gap:6px}
+    .api-sidebar .controls > .field > button,
+    .api-sidebar .controls.secondary-row > button{width:100%}
+    .api-sidebar .controls.secondary-row > div:empty{display:none}
+    .api-sidebar input[type="text"],.api-sidebar select{height:40px}
+    .api-sidebar .check{height:40px}
+    .api-sidebar button{min-height:40px;height:40px}
+    .api-sidebar .notice{margin-top:12px}
+    .api-results-pane{
+      min-width:0;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+      background:#0e1117;
+    }
+    .api-results-topbar{
+      flex:0 0 auto;
+      min-height:54px;
+      display:flex;
+      align-items:stretch;
+      border-bottom:1px solid #2b3241;
+      background:#121721;
+    }
+    .api-expand-slot{
+      flex:0 0 0;
+      width:0;
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      opacity:0;
+      transform:translateX(-8px);
+      transition:
+        width .22s cubic-bezier(.4,0,.2,1),
+        flex-basis .22s cubic-bezier(.4,0,.2,1),
+        opacity .16s ease,
+        transform .22s cubic-bezier(.4,0,.2,1);
+    }
+    .api-results-topbar .toolbar{
+      flex:1;
+      min-width:0;
+      margin:0;
+      padding:8px 14px;
+    }
+    .api-results-scroll{
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      padding:14px;
+      scrollbar-gutter:stable;
+    }
+    .api-results-scroll .grid{
+      grid-template-columns:repeat(auto-fill,minmax(270px,1fr));
+      gap:14px;
+    }
+    .api-results-scroll .foot{margin:16px 0 0}
+    .wrap.sidebar-hidden .api-layout{grid-template-columns:0px minmax(0,1fr)}
+    .wrap.sidebar-hidden .api-sidebar{
+      opacity:0;
+      transform:translateX(-24px);
+      padding-left:0;
+      padding-right:0;
+      border-right-color:transparent;
+      pointer-events:none;
+    }
+    .wrap.sidebar-hidden .api-expand-slot{
+      flex-basis:48px;
+      width:48px;
+      opacity:1;
+      transform:translateX(0);
+    }
+    @media (prefers-reduced-motion: reduce){
+      .api-layout,.api-sidebar,.api-expand-slot{transition:none!important}
+    }
+    @media(max-width:900px){
+      .api-layout{grid-template-columns:250px minmax(0,1fr)}
+      .api-results-scroll .grid{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+    }
+    @media(max-width:680px){
+      html,body{overflow:auto}
+      .wrap{height:auto;min-height:100vh;overflow:visible}
+      .api-layout{display:flex;flex-direction:column;overflow:visible}
+      .api-sidebar{max-height:none;border-right:0;border-bottom:1px solid #2b3241}
+      .api-results-pane{overflow:visible;min-height:520px}
+      .api-results-scroll{overflow:visible}
+      .wrap.sidebar-hidden .api-sidebar{
+        max-height:0;
+        padding-top:0;
+        padding-bottom:0;
+        border-bottom-color:transparent;
+        overflow:hidden;
+      }
+      .wrap.sidebar-hidden .api-layout{display:flex}
+    }
+          '''
+
+          js = r'''
+<script>
+/* api-split-layout-v1-script */
+(() => {
+  'use strict';
+
+  const wrap = document.querySelector('.wrap');
+  if (!wrap || wrap.dataset.splitLayout === '1') return;
+
+  const title = wrap.querySelector(':scope > h1');
+  const subtitle = wrap.querySelector(':scope > .subtitle');
+  const panel = wrap.querySelector(':scope > .panel');
+  const toolbar = wrap.querySelector(':scope > .toolbar');
+  const results = wrap.querySelector(':scope > #results');
+  const foot = wrap.querySelector(':scope > .foot');
+
+  if (!panel || !toolbar || !results) return;
+
+  wrap.dataset.splitLayout = '1';
+
+  const header = document.createElement('header');
+  header.className = 'api-page-header';
+  if (title) header.appendChild(title);
+  if (subtitle) header.appendChild(subtitle);
+
+  const layout = document.createElement('div');
+  layout.className = 'api-layout';
+
+  const sidebar = document.createElement('aside');
+  sidebar.className = 'api-sidebar';
+
+  const sidebarHeader = document.createElement('div');
+  sidebarHeader.className = 'api-sidebar-header';
+  sidebarHeader.innerHTML = `
+    <div class="api-sidebar-title">検索・絞り込み</div>
+    <button class="api-collapse-btn" id="api-collapse-sidebar" type="button" title="検索欄を隠す" aria-label="検索欄を隠す">≪</button>`;
+  sidebar.appendChild(sidebarHeader);
+  sidebar.appendChild(panel);
+
+  const resultsPane = document.createElement('section');
+  resultsPane.className = 'api-results-pane';
+
+  const resultsTopbar = document.createElement('div');
+  resultsTopbar.className = 'api-results-topbar';
+
+  const expandSlot = document.createElement('div');
+  expandSlot.className = 'api-expand-slot';
+  expandSlot.innerHTML = `<button class="api-expand-btn" id="api-expand-sidebar" type="button" title="検索欄を表示" aria-label="検索欄を表示">≫</button>`;
+  resultsTopbar.appendChild(expandSlot);
+  resultsTopbar.appendChild(toolbar);
+
+  const resultsScroll = document.createElement('div');
+  resultsScroll.className = 'api-results-scroll';
+  resultsScroll.appendChild(results);
+  if (foot) resultsScroll.appendChild(foot);
+
+  resultsPane.appendChild(resultsTopbar);
+  resultsPane.appendChild(resultsScroll);
+
+  layout.appendChild(sidebar);
+  layout.appendChild(resultsPane);
+  wrap.replaceChildren(header, layout);
+
+  const setSidebarVisible = (visible) => {
+    wrap.classList.toggle('sidebar-hidden', !visible);
+    try { localStorage.setItem('civitai-api-search-sidebar-visible', visible ? '1' : '0'); } catch {}
+  };
+
+  let initialVisible = true;
+  try { initialVisible = localStorage.getItem('civitai-api-search-sidebar-visible') !== '0'; } catch {}
+  setSidebarVisible(initialVisible);
+
+  document.getElementById('api-collapse-sidebar')?.addEventListener('click', () => setSidebarVisible(false));
+  document.getElementById('api-expand-sidebar')?.addEventListener('click', () => setSidebarVisible(true));
+})();
+</script>
+          '''
+
+          if '</style>' not in text:
+              raise SystemExit('Could not find </style>.')
+          text = text.replace('</style>', css + '\n  </style>', 1)
+
+          first_script = text.find('<script>')
+          if first_script == -1:
+              raise SystemExit('Could not find main <script>.')
+          text = text[:first_script] + js + '\n' + text[first_script:]
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit layout update
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add civitai_api_search_v4.html
+          git commit -m "Match API search layout to collection search"
+          git push
