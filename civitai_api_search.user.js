@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Civitai API検索
 // @namespace    https://civitai.com/
-// @version      1.2.0
-// @description  Civitai上からGitHub版のCivitai API検索画面を直接開きます。コレクション横断検索と同じ左右分割レイアウト・動画サムネイル対応。
+// @version      1.3.0
+// @description  Civitai上からGitHub版のCivitai API検索画面を直接開きます。左右分割レイアウト・動画サムネイル・検索キーワード関連度順に対応。
 // @homepageURL  https://github.com/j13351th-coder/civitai_api_search
 // @supportURL   https://github.com/j13351th-coder/civitai_api_search/issues
 // @updateURL    https://raw.githubusercontent.com/j13351th-coder/civitai_api_search/main/civitai_api_search.user.js
@@ -42,7 +42,79 @@
     });
   }
 
+  function injectRelevanceSupport(html) {
+    const newestOption = '<option value="Newest">新着順</option>';
+    const relevanceOption = '<option value="Relevance">関連度順（検索語）</option>';
+
+    if (!html.includes('value="Relevance"') && html.includes(newestOption)) {
+      html = html.replace(newestOption, `${newestOption}\n          ${relevanceOption}`);
+    }
+
+    if (!html.includes('api-relevance-fetch-patch')) {
+      const patch = `<script id="api-relevance-fetch-patch">
+(() => {
+  'use strict';
+  const nativeFetch = window.fetch.bind(window);
+
+  function rewriteRequest(input) {
+    try {
+      const sourceUrl = typeof input === 'string'
+        ? input
+        : (input instanceof Request ? input.url : String(input));
+      const url = new URL(sourceUrl, location.href);
+
+      if (url.pathname === '/api/v1/models' && url.searchParams.get('sort') === 'Relevance') {
+        const query = (url.searchParams.get('query') || '').trim();
+        if (query) {
+          url.searchParams.delete('sort');
+          url.searchParams.delete('period');
+        } else {
+          url.searchParams.set('sort', 'Newest');
+          url.searchParams.delete('period');
+        }
+
+        if (typeof input === 'string') return url.toString();
+        if (input instanceof Request) return new Request(url.toString(), input);
+      }
+    } catch {}
+    return input;
+  }
+
+  window.fetch = (input, init) => nativeFetch(rewriteRequest(input), init);
+
+  document.addEventListener('click', (event) => {
+    if (event.target?.id !== 'searchBtn') return;
+    const sort = document.getElementById('sort');
+    const query = document.getElementById('query');
+    if (sort?.value === 'Relevance' && !(query?.value || '').trim()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const status = document.getElementById('status');
+      if (status) status.textContent = '関連度順を使う場合は検索語を入力してください。';
+    }
+  }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.target?.id !== 'query') return;
+    const sort = document.getElementById('sort');
+    const query = document.getElementById('query');
+    if (sort?.value === 'Relevance' && !(query?.value || '').trim()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const status = document.getElementById('status');
+      if (status) status.textContent = '関連度順を使う場合は検索語を入力してください。';
+    }
+  }, true);
+})();
+</script>`;
+      html = html.replace(/<script>/i, `${patch}\n\n<script>`);
+    }
+
+    return html;
+  }
+
   function prepareHtml(html) {
+    html = injectRelevanceSupport(html);
     const baseTag = `<base href="${location.origin}/">`;
     if (/<head(?:\s[^>]*)?>/i.test(html)) {
       return html.replace(/<head(\s[^>]*)?>/i, (m) => `${m}\n${baseTag}`);
