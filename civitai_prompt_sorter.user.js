@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Civitai Prompt Auto Sort Copy
 // @namespace    https://civitai.com/
-// @version      1.0.0
-// @description  Civitaiでプロンプトをコピーすると、指定カテゴリ順に自動整列してコピーします。
+// @version      1.1.0
+// @description  Civitaiでプロンプトをコピーすると、指定カテゴリ順と改行ルールで自動整列してコピーします。
 // @homepageURL  https://github.com/j13351th-coder/civitai_api_search
 // @supportURL   https://github.com/j13351th-coder/civitai_api_search/issues
 // @updateURL    https://raw.githubusercontent.com/j13351th-coder/civitai_api_search/main/civitai_prompt_sorter.user.js
@@ -85,7 +85,24 @@
   function sortPrompt(text) {
     const buckets=Object.fromEntries(ORDER.map(k=>[k,[]]));
     for (const token of splitPrompt(text)) buckets[classify(token)].push(token.trim());
-    return ORDER.map(k=>buckets[k].filter(Boolean).join(', ')).filter(Boolean).join('\n');
+
+    const line = (...keys) => keys.flatMap(k => buckets[k]).filter(Boolean).join(', ');
+    const sections = [
+      [line('quality')],
+      [line('count')],
+      [line('series','artist')],
+      [line('hair','face','body'), line('top'), line('bottom'), line('shoes','accessory')],
+      [line('background')],
+      [line('camera')],
+      [line('expression','pose','action')],
+      [line('other')]
+    ];
+
+    return sections
+      .map(lines => lines.filter(Boolean))
+      .filter(lines => lines.length)
+      .map(lines => lines.join('\n'))
+      .join('\n\n');
   }
 
   const transform=(text)=>looksLikePrompt(text)?sortPrompt(text):String(text??'');
