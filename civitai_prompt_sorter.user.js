@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Civitai Prompt Auto Sort Copy
 // @namespace    https://civitai.com/
-// @version      1.1.0
-// @description  Civitaiでプロンプトをコピーすると、指定カテゴリ順と改行ルールで自動整列してコピーします。
+// @version      1.2.0
+// @description  Civitaiでポジティブプロンプトを指定カテゴリ順に自動整列。ネガティブプロンプトはそのままコピーします。
 // @homepageURL  https://github.com/j13351th-coder/civitai_api_search
 // @supportURL   https://github.com/j13351th-coder/civitai_api_search/issues
 // @updateURL    https://raw.githubusercontent.com/j13351th-coder/civitai_api_search/main/civitai_prompt_sorter.user.js
@@ -20,12 +20,12 @@
   const FORCE_OTHER = new Set(['mature female','medium build','female focus','feet','toes','groin']);
   const FORCE_ARTIST = new Set(['@hspani']);
   const FORCE_EXPRESSION = new Set(['looking down at viewer']);
-  const SERIES_TAGS = new Set([]); // 必要なら追加
-  const ARTIST_TAGS = new Set([]); // 必要なら追加
+  const SERIES_TAGS = new Set([]);
+  const ARTIST_TAGS = new Set([]);
 
   const RX = {
-    quality: /^(masterpiece|best quality|high quality|great quality|good quality|normal quality|low quality|worst quality|amazing quality|very aesthetic|aesthetic|ultra detailed|highly detailed|absurdres|highres|official art|key visual|safe|sensitive|questionable|explicit|newest|recent|mid|old|early|late|meta|commentary request|translation request|score_\d+(?:_up)?|source_[a-z0-9_ -]+|rating[: _-]?(?:safe|general|sensitive|questionable|explicit)|19\d{2}s?|20\d{2}s?|\d{4}|year\s*\d{4}|circa\s*\d{4})$/,
-    count: /^(?:\d+(?:girl|boy|other|woman|man|female|male)s?|multiple girls|multiple boys|multiple others)$/,
+    quality: /^(?:masterpiece|best quality|high quality|great quality|good quality|normal quality|low quality|worst quality|amazing quality|very aesthetic|aesthetic|ultra[- ]detailed|highly detailed|high detailed|detailed|intricate details|absurdres|incredibly absurdres|highres|official art|key visual|illustration|highly detailed illustration|artstation style|perfect composition|elegant|sharp focus|realistic|photo|detailed face and eyes|detailed skin|safe|sensitive|questionable|explicit|newest|recent|mid|old|early|late|meta|commentary request|translation request|score[ _]\d+(?:[ _]up)?|source[ _][a-z0-9_ -]+|rating[: _-]?(?:safe|general|sensitive|questionable|explicit)|19\d{2}s?|20\d{2}s?|\d{4}|year\s*\d{4}|circa\s*\d{4})$/,
+    count: /^(?:solo|\d+(?:girl|boy|other|woman|man|female|male)s?|multiple girls|multiple boys|multiple others)$/,
     hair: /\b(?:hair|bangs|fringe|ahoge|sidelocks|ponytail|twintails?|twin braids?|braid(?:ed|s)?|bun|hime cut|bob cut|short hair|long hair|medium hair|very long hair|curly hair|wavy hair|straight hair|messy hair|hair over one eye|hair between eyes|hair intakes?)\b/,
     face: /\b(?:eyes?|eyelashes?|eyebrows?|eyelids?|heterochromia|pupils?|iris|sclera|mouth|lips?|teeth|fangs?|tongue|nose|ears?|cheeks?|face)\b/,
     body: /\b(?:breasts?|chest|cleavage|waist|hips?|thighs?|legs?|arms?|hands?|fingers?|navel|stomach|belly|back|shoulders?|muscular|slim|skinny|petite|tall|short stature|wide hips|thick thighs|body hair|freckles|mole|tan|dark skin|pale skin|skin tone)\b/,
@@ -39,6 +39,9 @@
     pose: /\b(?:standing|sitting|kneeling|squatting|lying|on back|on side|on stomach|crossed legs|legs crossed|arms crossed|arms up|one arm up|hands on hips|hand on hip|hands behind back|spread legs|legs together|contrapposto|posing|pose)\b/,
     action: /\b(?:walking|running|jumping|dancing|swimming|holding|carrying|grabbing|reaching|pointing|eating|drinking|cooking|reading|writing|sleeping|shouting|talking|playing|fighting|hugging|kissing|waving|clapping|climbing)\b/
   };
+
+  let lastInteractionTarget = null;
+  let lastInteractionAt = 0;
 
   function splitPrompt(input) {
     const out=[]; let cur='', p=0,b=0,c=0,q='',esc=false;
@@ -56,14 +59,29 @@
     return out;
   }
 
-  function normalizeToken(token) {
+  function unwrapToken(token) {
     let s=String(token??'').trim().replace(/\\([()\[\]{}])/g,'$1');
     let changed=true;
     while (changed&&s.length>1) {
       changed=false;
-      for (const [a,z] of [['(',')'],['[',']'],['{','}']]) if (s.startsWith(a)&&s.endsWith(z)) { s=s.slice(1,-1).trim(); changed=true; break; }
+      for (const [a,z] of [['(',')'],['[',']'],['{','}']]) {
+        if (s.startsWith(a)&&s.endsWith(z)) { s=s.slice(1,-1).trim(); changed=true; break; }
+      }
     }
-    return s.replace(/\s*:\s*-?\d+(?:\.\d+)?\s*$/,'').toLowerCase().replace(/_/g,' ').replace(/\s+/g,' ').trim();
+    return s;
+  }
+
+  function normalizeToken(token) {
+    return unwrapToken(token)
+      .replace(/\s*:\s*-?\d+(?:\.\d+)?\s*$/,'')
+      .toLowerCase()
+      .replace(/_/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+  }
+
+  function isLoraTag(token) {
+    return unwrapToken(token).toLowerCase().startsWith('<lora:');
   }
 
   function classify(token) {
@@ -77,21 +95,32 @@
   }
 
   function looksLikePrompt(text) {
-    const t=splitPrompt(text); if (t.length<3) return false;
-    let recognized=0; for (const x of t.slice(0,30)) if (classify(x)!=='other') recognized++;
+    const t=splitPrompt(text).filter(x=>!isLoraTag(x));
+    if (t.length<3) return false;
+    let recognized=0;
+    for (const x of t.slice(0,30)) if (classify(x)!=='other') recognized++;
     return recognized>=1||t.length>=6;
+  }
+
+  function formatLine(tokens) {
+    const items=tokens.filter(Boolean);
+    return items.length ? `${items.join(', ')}, ` : '';
   }
 
   function sortPrompt(text) {
     const buckets=Object.fromEntries(ORDER.map(k=>[k,[]]));
-    for (const token of splitPrompt(text)) buckets[classify(token)].push(token.trim());
+    for (const token of splitPrompt(text)) {
+      if (isLoraTag(token)) continue;
+      const clean=token.trim();
+      if (clean) buckets[classify(clean)].push(clean);
+    }
 
-    const line = (...keys) => keys.flatMap(k => buckets[k]).filter(Boolean).join(', ');
-    const sections = [
+    const line=(...keys)=>formatLine(keys.flatMap(k=>buckets[k]));
+    const sections=[
       [line('quality')],
       [line('count')],
       [line('series','artist')],
-      [line('hair','face','body'), line('top'), line('bottom'), line('shoes','accessory')],
+      [line('hair','face','body'),line('top'),line('bottom'),line('shoes','accessory')],
       [line('background')],
       [line('camera')],
       [line('expression','pose','action')],
@@ -99,32 +128,82 @@
     ];
 
     return sections
-      .map(lines => lines.filter(Boolean))
-      .filter(lines => lines.length)
-      .map(lines => lines.join('\n'))
+      .map(lines=>lines.filter(Boolean))
+      .filter(lines=>lines.length)
+      .map(lines=>lines.join('\n'))
       .join('\n\n');
   }
 
-  const transform=(text)=>looksLikePrompt(text)?sortPrompt(text):String(text??'');
+  function nodeText(node) {
+    if (!node) return '';
+    const parts=[];
+    try {
+      if (node.getAttribute) {
+        parts.push(node.getAttribute('aria-label')||'');
+        parts.push(node.getAttribute('title')||'');
+        parts.push(node.getAttribute('data-label')||'');
+      }
+      parts.push(node.textContent||'');
+    } catch {}
+    return parts.join(' ').replace(/\s+/g,' ').trim();
+  }
 
-  // Civitaiの「コピー」ボタンなどが Clipboard.writeText() を使う場合を自動変換。
+  function isNegativeContext(node) {
+    const rx=/\bnegative\s*prompt\b|ネガティブ\s*プロンプト/i;
+    let cur=node?.nodeType===1?node:node?.parentElement;
+    for (let depth=0;cur&&depth<8;depth++,cur=cur.parentElement) {
+      const t=nodeText(cur);
+      if (t.length<=2500&&rx.test(t)) return true;
+    }
+    return false;
+  }
+
+  function selectionIsNegative() {
+    try {
+      const sel=document.getSelection?.();
+      if (!sel||!sel.rangeCount) return false;
+      return isNegativeContext(sel.getRangeAt(0).commonAncestorContainer);
+    } catch { return false; }
+  }
+
+  function recentCopyIsNegative() {
+    return Date.now()-lastInteractionAt<3000&&isNegativeContext(lastInteractionTarget);
+  }
+
+  function transform(text) {
+    const raw=String(text??'');
+    if (/^\s*negative\s*prompt\s*[:：]/i.test(raw)) return raw;
+    if (recentCopyIsNegative()) return raw;
+    return looksLikePrompt(raw)?sortPrompt(raw):raw;
+  }
+
+  document.addEventListener('pointerdown',(event)=>{
+    lastInteractionTarget=event.target;
+    lastInteractionAt=Date.now();
+  },true);
+  document.addEventListener('click',(event)=>{
+    lastInteractionTarget=event.target;
+    lastInteractionAt=Date.now();
+  },true);
+
   try {
     const proto=globalThis.Clipboard?.prototype;
     if (proto?.writeText&&!proto.writeText.__cpsPatched) {
       const original=proto.writeText;
       const patched=function(text){ return original.call(this,transform(text)); };
-      patched.__cpsPatched=true; proto.writeText=patched;
+      patched.__cpsPatched=true;
+      proto.writeText=patched;
     }
   } catch (e) { console.warn('[Civitai Prompt Sorter] clipboard patch failed',e); }
 
-  // Ctrl+C / 選択コピーにも対応。
   document.addEventListener('copy',(event)=>{
     try {
       const selected=String(document.getSelection?.()||'');
-      if (!looksLikePrompt(selected)) return;
-      event.preventDefault(); event.clipboardData?.setData('text/plain',sortPrompt(selected));
+      if (!selected||selectionIsNegative()||!looksLikePrompt(selected)) return;
+      event.preventDefault();
+      event.clipboardData?.setData('text/plain',sortPrompt(selected));
     } catch (e) { console.warn('[Civitai Prompt Sorter] copy transform failed',e); }
   },true);
 
-  globalThis.civitaiPromptSorter=Object.freeze({sortPrompt,classify,normalizeToken,splitPrompt});
+  globalThis.civitaiPromptSorter=Object.freeze({sortPrompt,classify,normalizeToken,splitPrompt,isLoraTag});
 })();
