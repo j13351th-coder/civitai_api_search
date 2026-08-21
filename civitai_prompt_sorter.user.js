@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Civitai Prompt Auto Sort Copy
 // @namespace    https://civitai.com/
-// @version      1.2.0
-// @description  Civitaiでポジティブプロンプトを指定カテゴリ順に自動整列。ネガティブプロンプトはそのままコピーします。
+// @version      1.3.0
+// @description  Civitaiでポジティブプロンプトを指定カテゴリ順に自動整列。重複除去・品質タグ優先・ネガティブプロンプト無加工に対応。
 // @homepageURL  https://github.com/j13351th-coder/civitai_api_search
 // @supportURL   https://github.com/j13351th-coder/civitai_api_search/issues
 // @updateURL    https://raw.githubusercontent.com/j13351th-coder/civitai_api_search/main/civitai_prompt_sorter.user.js
@@ -84,12 +84,18 @@
     return unwrapToken(token).toLowerCase().startsWith('<lora:');
   }
 
+  function isQualityLike(token) {
+    const n=normalizeToken(token);
+    return /(?:highres|detailed|amazing|absurdres)/i.test(n);
+  }
+
   function classify(token) {
     const n=normalizeToken(token);
     if (!n||FORCE_OTHER.has(n)) return 'other';
     if (FORCE_ARTIST.has(n)||ARTIST_TAGS.has(n)||/^artist\s*[:：]/.test(n)) return 'artist';
     if (FORCE_EXPRESSION.has(n)) return 'expression';
     if (SERIES_TAGS.has(n)||/^(series|copyright)\s*[:：]/.test(n)) return 'series';
+    if (isQualityLike(token)) return 'quality';
     for (const key of ORDER) if (RX[key]?.test(n)) return key;
     return 'other';
   }
@@ -102,6 +108,28 @@
     return recognized>=1||t.length>=6;
   }
 
+  function dedupeExact(tokens) {
+    const seen=new Set();
+    const out=[];
+    for (const token of tokens) {
+      const key=String(token??'').trim();
+      if (!key||seen.has(key)) continue;
+      seen.add(key);
+      out.push(key);
+    }
+    return out;
+  }
+
+  function prioritizeMasterpiece(tokens) {
+    const masterpiece=[];
+    const rest=[];
+    for (const token of tokens) {
+      if (normalizeToken(token)==='masterpiece') masterpiece.push(token);
+      else rest.push(token);
+    }
+    return [...masterpiece,...rest];
+  }
+
   function formatLine(tokens) {
     const items=tokens.filter(Boolean);
     return items.length ? `${items.join(', ')}, ` : '';
@@ -109,13 +137,19 @@
 
   function sortPrompt(text) {
     const buckets=Object.fromEntries(ORDER.map(k=>[k,[]]));
+    const seenTags=new Set();
+
     for (const token of splitPrompt(text)) {
       if (isLoraTag(token)) continue;
       const clean=token.trim();
-      if (clean) buckets[classify(clean)].push(clean);
+      if (!clean||seenTags.has(clean)) continue;
+      seenTags.add(clean);
+      buckets[classify(clean)].push(clean);
     }
 
-    const line=(...keys)=>formatLine(keys.flatMap(k=>buckets[k]));
+    buckets.quality=prioritizeMasterpiece(dedupeExact(buckets.quality));
+
+    const line=(...keys)=>formatLine(dedupeExact(keys.flatMap(k=>buckets[k])));
     const sections=[
       [line('quality')],
       [line('count')],
@@ -205,5 +239,5 @@
     } catch (e) { console.warn('[Civitai Prompt Sorter] copy transform failed',e); }
   },true);
 
-  globalThis.civitaiPromptSorter=Object.freeze({sortPrompt,classify,normalizeToken,splitPrompt,isLoraTag});
+  globalThis.civitaiPromptSorter=Object.freeze({sortPrompt,classify,normalizeToken,splitPrompt,isLoraTag,isQualityLike,dedupeExact});
 })();
